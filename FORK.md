@@ -41,7 +41,7 @@ installed plain upstream: fallback ON and `GH_TOKEN` accepted, with nothing
 erroring. Found by a cross model challenge of the adoption plan rather than of
 the code, and verified against `src/update.mjs` before acting.
 
-## The two changes carried in the code
+## The three changes carried in the code
 
 ### 1. The ChatGPT session fallback defaults to OFF
 
@@ -78,18 +78,78 @@ two are general purpose credentials that `gh` puts in the environment for
 reasons that have nothing to do with Copilot, and `gh` is installed on both
 machines here. The fork accepts only the dedicated name.
 
-## The two changes that are operating rules, not code
+### 3. The injected computer use skill names Brave, not Safari and Chrome
 
-### 3. Decline every provider path that runs `npm install -g`
+`skills/codex-computer-use/SKILL.md`.
+
+The installer copies five skill packs into `~/.codex/skills`, where **Codex reads
+them into every eligible session**. That makes them standing instructions to an
+agent, not documentation, and on this machine that agent runs with
+`sandbox_mode = "danger-full-access"` and `approval_policy = "never"`.
+
+Upstream's version named Safari and Chrome in two places, including "Common apps
+such as Safari and Chrome are usually pre-approved". The operator's standing rule
+is Brave only, never Chrome, and never Safari without being asked. The fork says
+Brave, and adds the rule that automation never touches the window the operator is
+working in.
+
+**The fork note in that file carries no date, deliberately.** A guard test at
+`test/skills-install.test.mjs:502` asserts no pack `SKILL.md` matches
+`/20\d\d-\d\d-\d\d/`, because the pack is loaded into every eligible session and a
+date in it rots in front of the model. The first version of this change dated the
+note and broke the suite on all three platforms. The date belongs here.
+
+**The point is not the browser. It is that this directory is an instruction
+surface.** The original audit's coverage statement named neither
+`src/skills-install.mjs` nor `src/codex-agent-catalog.mjs`, so the code that
+writes agent visible instructions into every future Codex session was never read.
+Anything added to `skills/` by a future upstream merge reaches the agent the same
+way and must be read as instructions rather than diffed as text.
+
+## The three changes that are operating rules, not code
+
+### 4. Decline every provider path that runs `npm install -g`
 
 The Kimi OAuth, Grok OAuth and DeepSeek Harness paths install third party CLIs
 globally with no version pin. GLM and DeepSeek are wired through their platform
 API keys instead, which install nothing and use the hidden terminal prompt.
 
-### 4. `bin/update` refuses to run on a fork
+### 5. `bin/update` refuses to run on a fork
 
 It checks the repository URL. Set `CODEX_ROUTER_REPOSITORY_URL` to this fork in
 the environment used for updates, or the update refuses.
+
+### 6. Never hand write an agent file called `router-model-*.toml`
+
+`~/.codex/agents/router-model-<anything>.toml` is a namespace this tool claims
+**by filename alone**, and it deletes what it finds there.
+
+`src/codex-agent-catalog.mjs:31` defines the namespace as the regular expression
+`/^router-model-[a-z0-9-]+\.toml$/`, and `syncRoutedCodexAgents` at `:100-104`
+unlinks every file matching it that is not in the current model set. There is no
+marker, no token and no ownership record. Compare the skills path, which requires
+a 64 hex token to match both an on disk marker and a 0600 ownership file
+(`src/skills-install.mjs:181-196`) and which fails closed at every branch. The
+agent path has none of that.
+
+**So a file you write yourself at that name is deleted with no backup and no
+message.** It fires on every catalog publish (`src/catalog.mjs:884`), and
+`doctor --fix` re-runs the installer (`src/doctor.mjs:250-254`), so a repair
+triggers it too. The unlink error path swallows failures and success prints
+nothing, so you would not see it happen.
+
+**Nothing is at risk today and that is luck, not design.** `~/.codex/agents` does
+not exist on this machine, so there is nothing there to lose. The risk begins the
+first time anything is put in it.
+
+**Any other agent file name is safe.** The test suite proves only that negative
+case: `test/codex-agent-catalog.test.mjs:89-97` asserts a file named
+`reviewer.toml` survives. Nothing tests a user file INSIDE the namespace, because
+the code cannot tell one from its own.
+
+Found by a read only audit of the install surface on 2026-08-18. **Recorded, not
+fixed**, because closing it means adding an ownership scheme to a code path this
+fork otherwise leaves untouched, and that is a larger change than a fork note.
 
 ## Known and accepted, not fixed
 
