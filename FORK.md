@@ -17,14 +17,29 @@ merge that reintroduces either one fails a test rather than landing quietly.
 **Audit:** [`AUDIT-2026-08-18.md`](AUDIT-2026-08-18.md), a read only pass over
 the source. Nothing was installed and nothing was run during it.
 
-**Audited commit:** `9995c77278608640759982c98ec5bdaeb371c174`, 2026-08-17.
+**Audited upstream commit:** `9995c77278608640759982c98ec5bdaeb371c174`,
+2026-08-17.
 
 **Verdict: safe to fork and pin, with four named changes.** Clean on telemetry,
 analytics, author controlled domains, obfuscation, `eval`, dynamic code loading
 and committed secrets across 584 commits of history.
 
-`main` was fast forwarded from `471eca5` to the audited commit on 2026-08-18, so
-the pin and the audit name the same tree. They did not before.
+**PIN THIS FORK'S `main`, NOT the audited upstream commit.** `main` was fast
+forwarded from `471eca5` to `9995c77`, then the hardening was merged into it as
+`467e710`. **Pinning `9995c77` would pin a tree that does NOT contain either
+code change**, because the audited commit is upstream's and the hardening sits
+on top of it.
+
+**This is not a nicety, and it nearly shipped as one.** `bin/update` and
+`install.sh` both converge on `origin/main`: `src/update.mjs` fetches
+`origin main`, refuses any checkout not on `main`, and merges `origin/main` fast
+forward. **`CODEX_ROUTER_REPOSITORY_URL` only widens an allowlist** at
+`src/update.mjs:31-39`; it is added to a set that already contains the upstream
+URLs and **it never steers the pull**. So while the hardening sat on a branch,
+every sanctioned path, a fresh clone of the stable checkout included, would have
+installed plain upstream: fallback ON and `GH_TOKEN` accepted, with nothing
+erroring. Found by a cross model challenge of the adoption plan rather than of
+the code, and verified against `src/update.mjs` before acting.
 
 ## The two changes carried in the code
 
