@@ -2,8 +2,8 @@
 
 `blizzardbase/codex-router` forks `duolahypercho/codex-router`.
 
-**Why it exists.** Harish wants his GLM and DeepSeek API keys usable inside the
-Codex harness. That is the whole purpose. Nothing here is meant to be a
+**Why it exists.** This deployment needs GLM and DeepSeek API keys usable inside
+the Codex harness. That is the whole purpose. Nothing here is meant to be a
 contribution back upstream, and no pull request from this fork goes to the
 author.
 
@@ -60,8 +60,8 @@ route this fork exists to serve.
 
 Upstream accepts `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` and `GITHUB_TOKEN`. The last
 two are general purpose credentials that `gh` puts in the environment for
-reasons that have nothing to do with Copilot, and `gh` is installed on both of
-Harish's machines. The fork accepts only the dedicated name.
+reasons that have nothing to do with Copilot, and `gh` is installed on both
+machines here. The fork accepts only the dedicated name.
 
 ## The two changes that are operating rules, not code
 
