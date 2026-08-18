@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **FORK CHANGE, blizzardbase. The ChatGPT session fallback defaults to OFF.**
+  Upstream defaults it on and documents `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0`
+  as the off switch. No service generator ever wrote that variable, so the
+  service started without it and every install and update silently restored the
+  on default. This fork inverts the default, so
+  `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` turns it ON, and all three service
+  generators write the setting explicitly into the generated service file. The
+  earlier entry below, which states that `=0` turns it off, describes upstream
+  and is left as the historical record. See `FORK.md`.
+
+- **FORK CHANGE, blizzardbase. The `github-copilot` provider no longer reads
+  `GH_TOKEN` or `GITHUB_TOKEN`.** Both are general purpose GitHub credentials
+  that `gh` exports for reasons unrelated to Copilot. Only
+  `COPILOT_GITHUB_TOKEN` is read. See `FORK.md`.
+
 - **A Codex Stop hook continues grok-oauth mid-task stops once.** After a
   tool result, a short status sentence with no follow-up tool call used to
   hand control back. `hooks/codex-stop-grok-oauth.mjs` is a user-level Stop

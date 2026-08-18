@@ -123,45 +123,86 @@ test("the fallback is OFF when nothing asks for it", () => {
 // test that cannot fail the way the thing fails is decorative.
 test("every generated service file carries the fallback setting", async () => {
   const { execFileSync } = await import("node:child_process");
+
   // Each generator emits a different format, so each is asserted in its own
-  // format. A generic "the name appears somewhere" match is what the earlier
-  // version got wrong.
-  const generators = [
-    [
-      "src/service-macos.mjs",
+  // format, and each is asserted INSIDE the region the platform actually treats
+  // as the service environment.
+  //
+  // Both narrowings came from adversarial passes that broke the previous test.
+  // The first version grepped the generator's SOURCE for the variable name; a
+  // conditional spread that omits the key when the variable is unset emitted
+  // nothing and the grep still passed. The second version rendered the output
+  // but matched anywhere in the document; moving the entry into the plist's
+  // root dict, where launchd does not treat it as an environment variable,
+  // emitted an inert pair and the test still passed. A test that cannot fail
+  // the way the thing fails is decorative.
+  const sections = {
+    // launchd reads only the EnvironmentVariables dict. Anything in the root
+    // dict is inert.
+    "src/service-macos.mjs": (out) => {
+      const open = out.indexOf("<key>EnvironmentVariables</key>");
+      assert.notEqual(open, -1, "no EnvironmentVariables dict was rendered");
+      const dict = out.indexOf("<dict>", open);
+      const close = out.indexOf("</dict>", dict);
+      assert.ok(close > dict, "the EnvironmentVariables dict never closed");
+      return out.slice(dict, close);
+    },
+    // systemd reads Environment= lines in [Service]. A commented line still
+    // contains the substring, so comments are dropped.
+    "src/service-linux.mjs": (out) => {
+      const start = out.indexOf("[Service]");
+      assert.notEqual(start, -1, "no [Service] section was rendered");
+      const rest = out.slice(start + "[Service]".length);
+      const nextSection = rest.search(/\n\[/);
+      return (nextSection === -1 ? rest : rest.slice(0, nextSection))
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("#"))
+        .join("\n");
+    },
+    // A cmd `set` after the node invocation runs only once the router exits,
+    // so only the lines before it count.
+    "src/service-windows.mjs": (out) => {
+      const exec = out.search(/^"[^"]*node[^"]*"/m);
+      return exec === -1 ? out : out.slice(0, exec);
+    },
+  };
+
+  const patterns = {
+    "src/service-macos.mjs": [
       /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>0<\/string>/,
       /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>1<\/string>/,
     ],
-    [
-      "src/service-linux.mjs",
+    "src/service-linux.mjs": [
       /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
       /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
     ],
-    [
-      "src/service-windows.mjs",
+    "src/service-windows.mjs": [
       /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
       /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
     ],
-  ];
+  };
+
   const root = new URL("../", import.meta.url).pathname;
   const render = (file, value) => {
     const env = { ...process.env };
     if (value === undefined) delete env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
     else env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = value;
-    return execFileSync(process.execPath, [file, "render"], {
+    const out = execFileSync(process.execPath, [file, "render"], {
       cwd: root,
       encoding: "utf8",
       env,
     });
+    return sections[file](out);
   };
 
-  for (const [file, offPattern, onPattern] of generators) {
+  for (const file of Object.keys(patterns)) {
+    const [offPattern, onPattern] = patterns[file];
     // Unset means off, and the generated file must SAY off rather than leave it
     // to a default the reader cannot see.
     assert.match(
       render(file, undefined),
       offPattern,
-      `${file} must render the fallback as off when nothing asks for it`,
+      `${file} must render the fallback as off, inside the service environment`,
     );
     // An explicit opt in has to survive into the service file, which is the
     // whole thing upstream lost.

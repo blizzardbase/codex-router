@@ -1666,7 +1666,10 @@ user has to find in the docs, so `src/dsh-install.mjs` owns the other half.
   a usable session: they need a ChatGPT session, a harness request carries none
   of its own, and the fallback spends the one this machine is already signed in
   with. They are withheld again the moment it is missing or expired. The count
-  the button reports is the routable set, not the picker.
+  the button reports is the routable set, not the picker. **FORK CHANGE,
+  blizzardbase, 2026-08-18: a usable session is necessary and no longer
+  sufficient.** The fallback is off by default here, so nothing publishes unless
+  `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` is set. See `FORK.md`.
 
 `src/dsh-web.mjs` starts and finds the browser UI, so the tray's button can be
 `Open site` once there is a site to open.

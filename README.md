@@ -1412,7 +1412,10 @@ a byte-count estimate rather than by spending a real turn upstream.
 
 **Native GPT models** publish here under the same rule as the harness, described
 above: while this machine has a usable Codex session, and withheld the moment it
-does not.
+does not. **FORK CHANGE, blizzardbase, 2026-08-18: a usable session is no longer
+sufficient**, because this fork defaults the session fallback to off. Native GPT
+models publish here only when `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` is also
+set. See `FORK.md`.
 
 ## macOS tray control panel
 
