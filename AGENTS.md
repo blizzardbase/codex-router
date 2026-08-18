@@ -1758,8 +1758,11 @@ the same user on the same machine buys nothing.
   serialized status contains neither the token nor the account id.
 - **It widens the caller key.** With the fallback on, anything holding that key
   spends the ChatGPT subscription and not only the API-key providers. That is a
-  deliberate, user-made tradeoff; `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` turns
-  it off and the harness silently drops back to routed models only.
+  deliberate, user-made tradeoff. **FORK CHANGE, blizzardbase, 2026-08-18: the
+  fallback is OFF by default in this fork**, because upstream's documented off
+  switch never reached a generated service file and so did not survive an
+  install. `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` turns it ON; with it off the
+  harness silently drops back to routed models only. See `FORK.md`.
 - **The access token lives about ten days, and Codex renews it only when Codex
   is used.** A harness-only stretch longer than that would otherwise leave the
   router sending a dead token. `nativeSessionHeaders()` reads the `exp` claim

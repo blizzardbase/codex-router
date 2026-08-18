@@ -100,7 +100,12 @@ test("the fallback is OFF when nothing asks for it", () => {
     assert.equal(nativeSessionHeaders(), undefined);
     assert.equal(nativeSessionAvailable(), false);
     // The session is still visible to a status reader. Off means not spent,
-    // not pretended away, so `doctor` can still say the session is there.
+    // not pretended away.
+    //
+    // It does NOT mean `doctor` reports it: src/doctor.mjs gates its session
+    // line on `present && fallbackEnabled`, so with the fallback off the doctor
+    // says nothing about the session at all. An earlier version of this comment
+    // claimed the opposite and was wrong.
     assert.equal(nativeSessionStatus().present, true);
   } finally {
     process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
@@ -109,18 +114,61 @@ test("the fallback is OFF when nothing asks for it", () => {
 
 // The generated service files are where the upstream off switch was lost, so
 // the fork asserts the variable reaches them.
+//
+// This RENDERS each generator and reads its output. An earlier version grepped
+// the generator's source for the variable name, which an adversarial pass broke:
+// replacing the entry with a conditional spread that omits the key when the
+// variable is unset emitted no fallback entry at all and the grep still passed.
+// That is exactly how an upstream merge conflict would plausibly resolve. A
+// test that cannot fail the way the thing fails is decorative.
 test("every generated service file carries the fallback setting", async () => {
-  const { readFileSync } = await import("node:fs");
-  for (const file of [
-    "src/service-macos.mjs",
-    "src/service-linux.mjs",
-    "src/service-windows.mjs",
-  ]) {
-    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  const { execFileSync } = await import("node:child_process");
+  // Each generator emits a different format, so each is asserted in its own
+  // format. A generic "the name appears somewhere" match is what the earlier
+  // version got wrong.
+  const generators = [
+    [
+      "src/service-macos.mjs",
+      /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>0<\/string>/,
+      /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>1<\/string>/,
+    ],
+    [
+      "src/service-linux.mjs",
+      /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
+      /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
+    ],
+    [
+      "src/service-windows.mjs",
+      /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
+      /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
+    ],
+  ];
+  const root = new URL("../", import.meta.url).pathname;
+  const render = (file, value) => {
+    const env = { ...process.env };
+    if (value === undefined) delete env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
+    else env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = value;
+    return execFileSync(process.execPath, [file, "render"], {
+      cwd: root,
+      encoding: "utf8",
+      env,
+    });
+  };
+
+  for (const [file, offPattern, onPattern] of generators) {
+    // Unset means off, and the generated file must SAY off rather than leave it
+    // to a default the reader cannot see.
     assert.match(
-      source,
-      /CODEX_ROUTER_NATIVE_SESSION_FALLBACK/,
-      `${file} must write the fallback setting into the service environment`,
+      render(file, undefined),
+      offPattern,
+      `${file} must render the fallback as off when nothing asks for it`,
+    );
+    // An explicit opt in has to survive into the service file, which is the
+    // whole thing upstream lost.
+    assert.match(
+      render(file, "1"),
+      onPattern,
+      `${file} must carry an explicit opt in into the service environment`,
     );
   }
 });
