@@ -8,6 +8,11 @@ const home = mkdtempSync(path.join(os.tmpdir(), "native-session-"));
 const authPath = path.join(home, "auth.json");
 process.env.MODEL_ROUTER_CODEX_AUTH = authPath;
 
+// FORK CHANGE, blizzardbase, 2026-08-18. The fallback is off unless it is
+// asked for, so the cases below that exercise the enabled path have to ask.
+// The default itself is asserted in its own test, with the variable unset.
+process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+
 const {
   nativeSessionAvailable,
   nativeSessionHeaders,
@@ -76,7 +81,47 @@ test("the fallback can be switched off", () => {
     assert.equal(nativeSessionAvailable(), false);
     assert.equal(nativeSessionStatus().fallbackEnabled, false);
   } finally {
-    delete process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
+    process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+  }
+});
+
+// FORK CHANGE, blizzardbase, 2026-08-18. This is the fork's whole reason to
+// exist as a fork rather than a pin, so it is asserted rather than assumed.
+// Upstream defaults this ON and documents an env var as the way out; that
+// variable is never written into any generated service file, so the service
+// starts without it and every install and update restores the ON default.
+// A signed-in ChatGPT session on this machine is then spendable by any local
+// process holding the caller key.
+test("the fallback is OFF when nothing asks for it", () => {
+  writeAuth({ access_token: ACCESS, account_id: ACCOUNT });
+  delete process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
+  try {
+    assert.equal(nativeSessionStatus().fallbackEnabled, false);
+    assert.equal(nativeSessionHeaders(), undefined);
+    assert.equal(nativeSessionAvailable(), false);
+    // The session is still visible to a status reader. Off means not spent,
+    // not pretended away, so `doctor` can still say the session is there.
+    assert.equal(nativeSessionStatus().present, true);
+  } finally {
+    process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+  }
+});
+
+// The generated service files are where the upstream off switch was lost, so
+// the fork asserts the variable reaches them.
+test("every generated service file carries the fallback setting", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const file of [
+    "src/service-macos.mjs",
+    "src/service-linux.mjs",
+    "src/service-windows.mjs",
+  ]) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.match(
+      source,
+      /CODEX_ROUTER_NATIVE_SESSION_FALLBACK/,
+      `${file} must write the fallback setting into the service environment`,
+    );
   }
 });
 
