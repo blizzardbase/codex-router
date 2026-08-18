@@ -124,92 +124,104 @@ test("the fallback is OFF when nothing asks for it", () => {
 test("every generated service file carries the fallback setting", async () => {
   const { execFileSync } = await import("node:child_process");
 
-  // Each generator emits a different format, so each is asserted in its own
-  // format, and each is asserted INSIDE the region the platform actually treats
-  // as the service environment.
+  // This asserts the EFFECTIVE value the platform would end up with, not that
+  // the variable appears somewhere in the file. Three adversarial passes each
+  // broke a weaker version, and every break was of the same shape: the string
+  // was present and the service still did the wrong thing.
   //
-  // Both narrowings came from adversarial passes that broke the previous test.
-  // The first version grepped the generator's SOURCE for the variable name; a
-  // conditional spread that omits the key when the variable is unset emitted
-  // nothing and the grep still passed. The second version rendered the output
-  // but matched anywhere in the document; moving the entry into the plist's
-  // root dict, where launchd does not treat it as an environment variable,
-  // emitted an inert pair and the test still passed. A test that cannot fail
-  // the way the thing fails is decorative.
-  const sections = {
-    // launchd reads only the EnvironmentVariables dict. Anything in the root
-    // dict is inert.
+  //   grepped the generator SOURCE  -> a conditional spread emitted nothing
+  //   matched the rendered document -> an entry in the plist ROOT dict is inert
+  //   matched inside the section    -> a `;` commented systemd line is inert,
+  //                                    and a LATER duplicate assignment wins
+  //
+  // Only the last assignment counts on systemd and cmd, so presence proves
+  // nothing. Each reader below collects the assignments in document order and
+  // returns the value that would actually take effect, or undefined.
+  const NAME = "CODEX_ROUTER_NATIVE_SESSION_FALLBACK";
+
+  const readers = {
+    // launchd reads only the EnvironmentVariables dict; a pair in the root dict
+    // is inert. Duplicate keys in a plist are parser dependent, so a duplicate
+    // is refused rather than resolved.
     "src/service-macos.mjs": (out) => {
       const open = out.indexOf("<key>EnvironmentVariables</key>");
       assert.notEqual(open, -1, "no EnvironmentVariables dict was rendered");
       const dict = out.indexOf("<dict>", open);
       const close = out.indexOf("</dict>", dict);
       assert.ok(close > dict, "the EnvironmentVariables dict never closed");
-      return out.slice(dict, close);
+      const region = out.slice(dict, close);
+      const found = [
+        ...region.matchAll(
+          /<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g,
+        ),
+      ].filter(([, key]) => key === NAME);
+      assert.ok(
+        found.length <= 1,
+        `${NAME} appears ${found.length} times in the plist environment; duplicate keys are parser dependent`,
+      );
+      return found.length === 1 ? found[0][2] : undefined;
     },
-    // systemd reads Environment= lines in [Service]. A commented line still
-    // contains the substring, so comments are dropped.
+    // systemd reads Environment= in [Service], treats BOTH `#` and `;` as
+    // comments, and applies the last assignment.
     "src/service-linux.mjs": (out) => {
-      const start = out.indexOf("[Service]");
-      assert.notEqual(start, -1, "no [Service] section was rendered");
-      const rest = out.slice(start + "[Service]".length);
-      const nextSection = rest.search(/\n\[/);
-      return (nextSection === -1 ? rest : rest.slice(0, nextSection))
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("#"))
-        .join("\n");
+      const at = out.indexOf("[Service]");
+      assert.notEqual(at, -1, "no [Service] section was rendered");
+      const rest = out.slice(at + "[Service]".length);
+      const next = rest.search(/\n\[/);
+      const region = next === -1 ? rest : rest.slice(0, next);
+      let value;
+      for (const line of region.split("\n")) {
+        const trimmed = line.trimStart();
+        if (trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
+        const m = trimmed.match(/^Environment="([^=]+)=([^"]*)"/);
+        if (m && m[1] === NAME) value = m[2];
+      }
+      return value;
     },
-    // A cmd `set` after the node invocation runs only once the router exits,
-    // so only the lines before it count.
+    // cmd applies the last assignment, and anything after the exec line runs
+    // only once the router exits.
     "src/service-windows.mjs": (out) => {
-      const exec = out.search(/^"[^"]*node[^"]*"/m);
-      return exec === -1 ? out : out.slice(0, exec);
+      const exec = out.search(/^"[^"]*"\s+"[^"]*start\.mjs"/m);
+      // A miss used to return the whole file, which silently reopened the hole
+      // this reader exists to close. It is loud now.
+      assert.notEqual(exec, -1, "could not find the exec line in the launcher");
+      let value;
+      for (const line of out.slice(0, exec).split("\n")) {
+        const m = line.trimStart().match(/^set "([^=]+)=([^"]*)"/);
+        if (m && m[1] === NAME) value = m[2];
+      }
+      return value;
     },
-  };
-
-  const patterns = {
-    "src/service-macos.mjs": [
-      /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>0<\/string>/,
-      /<key>CODEX_ROUTER_NATIVE_SESSION_FALLBACK<\/key>\s*<string>1<\/string>/,
-    ],
-    "src/service-linux.mjs": [
-      /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
-      /Environment="CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
-    ],
-    "src/service-windows.mjs": [
-      /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0"/,
-      /set "CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1"/,
-    ],
   };
 
   const root = new URL("../", import.meta.url).pathname;
-  const render = (file, value) => {
+  const effective = (file, value) => {
     const env = { ...process.env };
-    if (value === undefined) delete env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
-    else env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = value;
-    const out = execFileSync(process.execPath, [file, "render"], {
-      cwd: root,
-      encoding: "utf8",
-      env,
-    });
-    return sections[file](out);
+    if (value === undefined) delete env[NAME];
+    else env[NAME] = value;
+    return readers[file](
+      execFileSync(process.execPath, [file, "render"], {
+        cwd: root,
+        encoding: "utf8",
+        env,
+      }),
+    );
   };
 
-  for (const file of Object.keys(patterns)) {
-    const [offPattern, onPattern] = patterns[file];
+  for (const file of Object.keys(readers)) {
     // Unset means off, and the generated file must SAY off rather than leave it
     // to a default the reader cannot see.
-    assert.match(
-      render(file, undefined),
-      offPattern,
-      `${file} must render the fallback as off, inside the service environment`,
+    assert.equal(
+      effective(file, undefined),
+      "0",
+      `${file} must leave the service with the fallback OFF when nothing asks for it`,
     );
-    // An explicit opt in has to survive into the service file, which is the
-    // whole thing upstream lost.
-    assert.match(
-      render(file, "1"),
-      onPattern,
-      `${file} must carry an explicit opt in into the service environment`,
+    // An explicit opt in has to survive into the service, which is the whole
+    // thing upstream lost.
+    assert.equal(
+      effective(file, "1"),
+      "1",
+      `${file} must leave the service with an explicit opt in intact`,
     );
   }
 });
