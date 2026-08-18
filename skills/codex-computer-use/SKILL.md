@@ -37,7 +37,7 @@ connects to the SkyComputerUseService, which is already running.
 - The first computer-use action may need approval in the app
   (Settings → Computer use).
 
-- **FORK CHANGE, blizzardbase, 2026-08-18. Brave is the only browser.** Never
+- **FORK CHANGE, blizzardbase. Brave is the only browser.** Never
   Chrome, and never Safari without being asked for it directly. Upstream named
   Safari and Chrome here as pre-approved, which is the opposite of the rule on
   this machine, and this file is loaded into every eligible session rather than

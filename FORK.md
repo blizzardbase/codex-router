@@ -93,6 +93,12 @@ is Brave only, never Chrome, and never Safari without being asked. The fork says
 Brave, and adds the rule that automation never touches the window the operator is
 working in.
 
+**The fork note in that file carries no date, deliberately.** A guard test at
+`test/skills-install.test.mjs:502` asserts no pack `SKILL.md` matches
+`/20\d\d-\d\d-\d\d/`, because the pack is loaded into every eligible session and a
+date in it rots in front of the model. The first version of this change dated the
+note and broke the suite on all three platforms. The date belongs here.
+
 **The point is not the browser. It is that this directory is an instruction
 surface.** The original audit's coverage statement named neither
 `src/skills-install.mjs` nor `src/codex-agent-catalog.mjs`, so the code that
