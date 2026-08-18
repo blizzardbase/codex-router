@@ -247,10 +247,14 @@ test("provider registry exposes configured API and OAuth model families", () => 
   assert.equal(MODEL_BY_SLUG.get("kimi-api-cn/kimi-k3").upstreamModel, "kimi-k3");
   assert.equal(PROVIDERS.get("github-copilot").authProfile, "github-copilot");
   assert.equal(PROVIDERS.get("github-copilot").protocol, "openai-responses");
+  // FORK CHANGE, blizzardbase, 2026-08-18. GH_TOKEN and GITHUB_TOKEN are
+  // general purpose credentials that `gh` puts in the environment for reasons
+  // that have nothing to do with Copilot. Picking one up silently spends a
+  // token the operator aimed at something else, so this fork accepts only the
+  // dedicated name. This assertion is the guard: an upstream merge that
+  // reintroduces the general names fails here rather than landing quietly.
   assert.deepEqual(PROVIDERS.get("github-copilot").credential.environment, [
     "COPILOT_GITHUB_TOKEN",
-    "GH_TOKEN",
-    "GITHUB_TOKEN",
   ]);
   const chutes = PROVIDERS.get("chutes");
   assert.equal(chutes.baseUrl, "https://llm.chutes.ai/v1");

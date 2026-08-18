@@ -60,9 +60,13 @@ test("provider credentials use protected files and remove legacy managed keys", 
     );
     process.env.COPILOT_GITHUB_TOKEN = "ghp_TEST_CLASSIC_ENV_TOKEN";
     assert.equal(resolveProviderCredential("github-copilot"), undefined);
+    // FORK CHANGE, blizzardbase, 2026-08-18. Upstream read GH_TOKEN and
+    // GITHUB_TOKEN here and the first of them won. Both are general purpose
+    // GitHub credentials that `gh` exports, so this fork ignores them and the
+    // resolver must find nothing.
     process.env.GH_TOKEN = "gho_TEST_GH_TOKEN";
     process.env.GITHUB_TOKEN = "ghu_TEST_GITHUB_TOKEN";
-    assert.equal(resolveProviderCredential("github-copilot")?.value, "gho_TEST_GH_TOKEN");
+    assert.equal(resolveProviderCredential("github-copilot"), undefined);
     process.env.COPILOT_GITHUB_TOKEN = "github_pat_TEST_PRIMARY_TOKEN";
     assert.equal(
       resolveProviderCredential("github-copilot")?.value,
