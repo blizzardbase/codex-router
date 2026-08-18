@@ -64,6 +64,12 @@ function unit() {
     CODEX_ROUTER_OAUTH_PORT: String(PORTS.oauth),
     CODEX_ROUTER_PORT: String(PORTS.router),
     CODEX_ROUTER_API_PORT: String(PORTS.api),
+    // FORK CHANGE, blizzardbase, 2026-08-18. Written explicitly so the service
+    // environment states the posture rather than inheriting a default nobody
+    // can see. Upstream never wrote this name into a generated service file, so
+    // an operator who set it in a shell lost it on the next install or update.
+    CODEX_ROUTER_NATIVE_SESSION_FALLBACK:
+      process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK === "1" ? "1" : "0",
     ...(process.env.KIMI_CODE_HOME ? { KIMI_CODE_HOME: process.env.KIMI_CODE_HOME } : {}),
     ...(process.env.CODEX_ROUTER_SOURCE_ROOT
       ? { CODEX_ROUTER_SOURCE_ROOT: SOURCE_ROOT }

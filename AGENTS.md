@@ -1666,7 +1666,10 @@ user has to find in the docs, so `src/dsh-install.mjs` owns the other half.
   a usable session: they need a ChatGPT session, a harness request carries none
   of its own, and the fallback spends the one this machine is already signed in
   with. They are withheld again the moment it is missing or expired. The count
-  the button reports is the routable set, not the picker.
+  the button reports is the routable set, not the picker. **FORK CHANGE,
+  blizzardbase, 2026-08-18: a usable session is necessary and no longer
+  sufficient.** The fallback is off by default here, so nothing publishes unless
+  `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` is set. See `FORK.md`.
 
 `src/dsh-web.mjs` starts and finds the browser UI, so the tray's button can be
 `Open site` once there is a site to open.
@@ -1758,8 +1761,11 @@ the same user on the same machine buys nothing.
   serialized status contains neither the token nor the account id.
 - **It widens the caller key.** With the fallback on, anything holding that key
   spends the ChatGPT subscription and not only the API-key providers. That is a
-  deliberate, user-made tradeoff; `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` turns
-  it off and the harness silently drops back to routed models only.
+  deliberate, user-made tradeoff. **FORK CHANGE, blizzardbase, 2026-08-18: the
+  fallback is OFF by default in this fork**, because upstream's documented off
+  switch never reached a generated service file and so did not survive an
+  install. `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` turns it ON; with it off the
+  harness silently drops back to routed models only. See `FORK.md`.
 - **The access token lives about ten days, and Codex renews it only when Codex
   is used.** A harness-only stretch longer than that would otherwise leave the
   router sending a dead token. `nativeSessionHeaders()` reads the `exp` claim

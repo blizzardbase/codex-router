@@ -238,8 +238,11 @@ Enterprise Cloud data-residency hosts are not yet configured by the router.
 ```
 
 The hidden prompt stores the GitHub token in protected router state. For a
-foreground process, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, and `GITHUB_TOKEN` are
-checked in that order. Classic `ghp_` tokens are not supported by Copilot;
+foreground process, `COPILOT_GITHUB_TOKEN` is checked. **FORK CHANGE,
+blizzardbase, 2026-08-18: upstream also checks `GH_TOKEN` and `GITHUB_TOKEN`,
+and this fork does not.** Both are general purpose credentials that `gh` exports
+for reasons unrelated to Copilot, so picking one up spends a token aimed at
+something else. See `FORK.md`. Classic `ghp_` tokens are not supported by Copilot;
 create a fine-grained `github_pat_` token
 at [GitHub personal access tokens](https://github.com/settings/personal-access-tokens/new).
 The router deliberately does not read or copy the official Copilot CLI's
@@ -1341,10 +1344,16 @@ disappear, open Codex once to renew it; `./bin/model-router doctor` says so too.
 
 It is a fallback and never an override: a request that presents its own
 credential is relayed untouched, so nothing about a Codex turn changes. Worth
-knowing before leaving it on — it widens what the caller key reaches, from the
-API-key providers to your ChatGPT subscription as well. Set
-`CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` to turn it off, and the harness
-publishes routed models only.
+knowing before turning it on — it widens what the caller key reaches, from the
+API-key providers to your ChatGPT subscription as well.
+
+**FORK CHANGE, blizzardbase, 2026-08-18. This fallback is OFF by default here.**
+Upstream defaults it on and treats `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` as
+the off switch; that switch never reached any generated service file, so every
+install and update silently restored the on default. In this fork the default is
+inverted and all three service generators write the setting explicitly. Set
+`CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` to turn it ON. With it off, the harness
+publishes routed models only. See `FORK.md`.
 
 **Subagents.** A child spawned by `dsh-tool-subagent` with no model of its own
 inherits the default model selection, so it is already routed once this route
@@ -1403,7 +1412,10 @@ a byte-count estimate rather than by spending a real turn upstream.
 
 **Native GPT models** publish here under the same rule as the harness, described
 above: while this machine has a usable Codex session, and withheld the moment it
-does not.
+does not. **FORK CHANGE, blizzardbase, 2026-08-18: a usable session is no longer
+sufficient**, because this fork defaults the session fallback to off. Native GPT
+models publish here only when `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` is also
+set. See `FORK.md`.
 
 ## macOS tray control panel
 

@@ -26,12 +26,24 @@ export const CODEX_AUTH_PATH =
 // Off switch. The fallback widens what the caller key reaches -- with it, a
 // local process holding that key can spend the ChatGPT subscription and not
 // only the API-key providers -- so there has to be a way to say no.
+//
+// FORK CHANGE, blizzardbase, 2026-08-18. Upstream defaults this ON and treats
+// `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` as the way out. That switch does not
+// survive: `src/service-macos.mjs` builds the launchd plist from a fixed list of
+// variables and this name is not in it, so the service starts without it and
+// every install and update silently restores the ON default. The author reached
+// the opposite conclusion one file away, in `src/discovery-mode.mjs`, where the
+// mode is written to a file precisely because an env var dies with the setup run.
+//
+// So the default is inverted here: the fallback is off unless it is asked for.
+// A caller presenting its own credential is unaffected, which is every route
+// this fork exists to serve.
 export function nativeSessionFallbackEnabled() {
   // --no-discovery composes with the dedicated env switch: the Codex session
   // is a credential this process did not receive from its caller, so an idle
   // install must never spend it.
   if (discoveryDisabled()) return false;
-  return process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK !== "0";
+  return process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK === "1";
 }
 
 // The `exp` claim, in epoch milliseconds. Only the claim is read; the token

@@ -8,6 +8,11 @@ const home = mkdtempSync(path.join(os.tmpdir(), "native-session-"));
 const authPath = path.join(home, "auth.json");
 process.env.MODEL_ROUTER_CODEX_AUTH = authPath;
 
+// FORK CHANGE, blizzardbase, 2026-08-18. The fallback is off unless it is
+// asked for, so the cases below that exercise the enabled path have to ask.
+// The default itself is asserted in its own test, with the variable unset.
+process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+
 const {
   nativeSessionAvailable,
   nativeSessionHeaders,
@@ -76,7 +81,148 @@ test("the fallback can be switched off", () => {
     assert.equal(nativeSessionAvailable(), false);
     assert.equal(nativeSessionStatus().fallbackEnabled, false);
   } finally {
-    delete process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
+    process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+  }
+});
+
+// FORK CHANGE, blizzardbase, 2026-08-18. This is the fork's whole reason to
+// exist as a fork rather than a pin, so it is asserted rather than assumed.
+// Upstream defaults this ON and documents an env var as the way out; that
+// variable is never written into any generated service file, so the service
+// starts without it and every install and update restores the ON default.
+// A signed-in ChatGPT session on this machine is then spendable by any local
+// process holding the caller key.
+test("the fallback is OFF when nothing asks for it", () => {
+  writeAuth({ access_token: ACCESS, account_id: ACCOUNT });
+  delete process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK;
+  try {
+    assert.equal(nativeSessionStatus().fallbackEnabled, false);
+    assert.equal(nativeSessionHeaders(), undefined);
+    assert.equal(nativeSessionAvailable(), false);
+    // The session is still visible to a status reader. Off means not spent,
+    // not pretended away.
+    //
+    // It does NOT mean `doctor` reports it: src/doctor.mjs gates its session
+    // line on `present && fallbackEnabled`, so with the fallback off the doctor
+    // says nothing about the session at all. An earlier version of this comment
+    // claimed the opposite and was wrong.
+    assert.equal(nativeSessionStatus().present, true);
+  } finally {
+    process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK = "1";
+  }
+});
+
+// The generated service files are where the upstream off switch was lost, so
+// the fork asserts the variable reaches them.
+//
+// This RENDERS each generator and reads its output. An earlier version grepped
+// the generator's source for the variable name, which an adversarial pass broke:
+// replacing the entry with a conditional spread that omits the key when the
+// variable is unset emitted no fallback entry at all and the grep still passed.
+// That is exactly how an upstream merge conflict would plausibly resolve. A
+// test that cannot fail the way the thing fails is decorative.
+test("every generated service file carries the fallback setting", async () => {
+  const { execFileSync } = await import("node:child_process");
+
+  // This asserts the EFFECTIVE value the platform would end up with, not that
+  // the variable appears somewhere in the file. Three adversarial passes each
+  // broke a weaker version, and every break was of the same shape: the string
+  // was present and the service still did the wrong thing.
+  //
+  //   grepped the generator SOURCE  -> a conditional spread emitted nothing
+  //   matched the rendered document -> an entry in the plist ROOT dict is inert
+  //   matched inside the section    -> a `;` commented systemd line is inert,
+  //                                    and a LATER duplicate assignment wins
+  //
+  // Only the last assignment counts on systemd and cmd, so presence proves
+  // nothing. Each reader below collects the assignments in document order and
+  // returns the value that would actually take effect, or undefined.
+  const NAME = "CODEX_ROUTER_NATIVE_SESSION_FALLBACK";
+
+  const readers = {
+    // launchd reads only the EnvironmentVariables dict; a pair in the root dict
+    // is inert. Duplicate keys in a plist are parser dependent, so a duplicate
+    // is refused rather than resolved.
+    "src/service-macos.mjs": (out) => {
+      const open = out.indexOf("<key>EnvironmentVariables</key>");
+      assert.notEqual(open, -1, "no EnvironmentVariables dict was rendered");
+      const dict = out.indexOf("<dict>", open);
+      const close = out.indexOf("</dict>", dict);
+      assert.ok(close > dict, "the EnvironmentVariables dict never closed");
+      const region = out.slice(dict, close);
+      const found = [
+        ...region.matchAll(
+          /<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g,
+        ),
+      ].filter(([, key]) => key === NAME);
+      assert.ok(
+        found.length <= 1,
+        `${NAME} appears ${found.length} times in the plist environment; duplicate keys are parser dependent`,
+      );
+      return found.length === 1 ? found[0][2] : undefined;
+    },
+    // systemd reads Environment= in [Service], treats BOTH `#` and `;` as
+    // comments, and applies the last assignment.
+    "src/service-linux.mjs": (out) => {
+      const at = out.indexOf("[Service]");
+      assert.notEqual(at, -1, "no [Service] section was rendered");
+      const rest = out.slice(at + "[Service]".length);
+      const next = rest.search(/\n\[/);
+      const region = next === -1 ? rest : rest.slice(0, next);
+      let value;
+      for (const line of region.split("\n")) {
+        const trimmed = line.trimStart();
+        if (trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
+        const m = trimmed.match(/^Environment="([^=]+)=([^"]*)"/);
+        if (m && m[1] === NAME) value = m[2];
+      }
+      return value;
+    },
+    // cmd applies the last assignment, and anything after the exec line runs
+    // only once the router exits.
+    "src/service-windows.mjs": (out) => {
+      const exec = out.search(/^"[^"]*"\s+"[^"]*start\.mjs"/m);
+      // A miss used to return the whole file, which silently reopened the hole
+      // this reader exists to close. It is loud now.
+      assert.notEqual(exec, -1, "could not find the exec line in the launcher");
+      let value;
+      for (const line of out.slice(0, exec).split("\n")) {
+        const m = line.trimStart().match(/^set "([^=]+)=([^"]*)"/);
+        if (m && m[1] === NAME) value = m[2];
+      }
+      return value;
+    },
+  };
+
+  const root = new URL("../", import.meta.url).pathname;
+  const effective = (file, value) => {
+    const env = { ...process.env };
+    if (value === undefined) delete env[NAME];
+    else env[NAME] = value;
+    return readers[file](
+      execFileSync(process.execPath, [file, "render"], {
+        cwd: root,
+        encoding: "utf8",
+        env,
+      }),
+    );
+  };
+
+  for (const file of Object.keys(readers)) {
+    // Unset means off, and the generated file must SAY off rather than leave it
+    // to a default the reader cannot see.
+    assert.equal(
+      effective(file, undefined),
+      "0",
+      `${file} must leave the service with the fallback OFF when nothing asks for it`,
+    );
+    // An explicit opt in has to survive into the service, which is the whole
+    // thing upstream lost.
+    assert.equal(
+      effective(file, "1"),
+      "1",
+      `${file} must leave the service with an explicit opt in intact`,
+    );
   }
 });
 

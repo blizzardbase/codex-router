@@ -58,6 +58,12 @@ function wrapper() {
     CODEX_ROUTER_OAUTH_PORT: String(PORTS.oauth),
     CODEX_ROUTER_PORT: String(PORTS.router),
     CODEX_ROUTER_API_PORT: String(PORTS.api),
+    // FORK CHANGE, blizzardbase, 2026-08-18. Written explicitly so the service
+    // environment states the posture rather than inheriting a default nobody
+    // can see. Upstream never wrote this name into a generated service file, so
+    // an operator who set it in a shell lost it on the next install or update.
+    CODEX_ROUTER_NATIVE_SESSION_FALLBACK:
+      process.env.CODEX_ROUTER_NATIVE_SESSION_FALLBACK === "1" ? "1" : "0",
     // The LiteLLM gateway is a Python process. Force UTF-8 output so its
     // startup banner and logs do not crash on Windows systems whose default
     // ANSI/OEM code page is not UTF-8 (e.g. Russian cp1251), where Python
