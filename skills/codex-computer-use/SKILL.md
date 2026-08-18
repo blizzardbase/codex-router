@@ -1,6 +1,6 @@
 ---
 name: codex-computer-use
-description: Control local apps through Computer Use (the @oai/sky runtime) inside the Codex app. Use when the session uses a custom (non-OpenAI) model, for example deepseek-v4-flash or mimo-v2.5, and the user asks to control the computer, operate a desktop app's UI, use Safari or Chrome through computer use, click or type in an app, or take a screenshot of an app. Prefer purpose-built connectors, APIs, or CLIs when they exist.
+description: Control local apps through Computer Use (the @oai/sky runtime) inside the Codex app. Use when the session uses a custom (non-OpenAI) model, for example deepseek-v4-flash or mimo-v2.5, and the user asks to control the computer, operate a desktop app's UI, use Brave through computer use, click or type in an app, or take a screenshot of an app. Prefer purpose-built connectors, APIs, or CLIs when they exist.
 ---
 
 # Codex Computer Use
@@ -35,8 +35,19 @@ connects to the SkyComputerUseService, which is already running.
   does nothing.
 - Reuse the loaded `sky` runtime on later turns. Do not reinitialize.
 - The first computer-use action may need approval in the app
-  (Settings → Computer use). Common apps such as Safari and Chrome are
-  usually pre-approved.
+  (Settings → Computer use).
+
+- **FORK CHANGE, blizzardbase, 2026-08-18. Brave is the only browser.** Never
+  Chrome, and never Safari without being asked for it directly. Upstream named
+  Safari and Chrome here as pre-approved, which is the opposite of the rule on
+  this machine, and this file is loaded into every eligible session rather than
+  read once.
+
+- **Never touch the browser window the operator is working in.** Open a separate
+  instance or profile window and work only in tabs you opened yourself. Do not
+  open a tab in their active window, do not navigate a tab they had open, and do
+  not close their tabs. If the tooling can only attach to the running session,
+  say so and ask first.
 - Prefer purpose-built connectors, APIs, and CLIs over computer use when
   they exist. Computer use is for reading or operating app UI that nothing
   else can reach.

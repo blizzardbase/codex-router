@@ -78,6 +78,28 @@ two are general purpose credentials that `gh` puts in the environment for
 reasons that have nothing to do with Copilot, and `gh` is installed on both
 machines here. The fork accepts only the dedicated name.
 
+### 3. The injected computer use skill names Brave, not Safari and Chrome
+
+`skills/codex-computer-use/SKILL.md`.
+
+The installer copies five skill packs into `~/.codex/skills`, where **Codex reads
+them into every eligible session**. That makes them standing instructions to an
+agent, not documentation, and on this machine that agent runs with
+`sandbox_mode = "danger-full-access"` and `approval_policy = "never"`.
+
+Upstream's version named Safari and Chrome in two places, including "Common apps
+such as Safari and Chrome are usually pre-approved". The operator's standing rule
+is Brave only, never Chrome, and never Safari without being asked. The fork says
+Brave, and adds the rule that automation never touches the window the operator is
+working in.
+
+**The point is not the browser. It is that this directory is an instruction
+surface.** The original audit's coverage statement named neither
+`src/skills-install.mjs` nor `src/codex-agent-catalog.mjs`, so the code that
+writes agent visible instructions into every future Codex session was never read.
+Anything added to `skills/` by a future upstream merge reaches the agent the same
+way and must be read as instructions rather than diffed as text.
+
 ## The two changes that are operating rules, not code
 
 ### 3. Decline every provider path that runs `npm install -g`
